@@ -12,6 +12,7 @@ import os
 from datetime import datetime
 import numpy as np
 from huggingface_hub import hf_hub_download, list_repo_files
+from model_loader import get_model_and_processor
 
 # Define constants
 DESCRIPTION = "[ShowUI Demo](https://huggingface.co/showlab/ShowUI-2B)"
@@ -27,22 +28,25 @@ destination_folder = "./showui-2b"
 os.makedirs(destination_folder, exist_ok=True)
 
 # List all files in the repository
-files = list_repo_files(repo_id=model_repo)
+# files = list_repo_files(repo_id=model_repo)
 
 # Download each file to the destination folder
-for file in files:
-    file_path = hf_hub_download(repo_id=model_repo, filename=file, local_dir=destination_folder)
-    print(f"Downloaded {file} to {file_path}")
+# for file in files:
+#     file_path = hf_hub_download(repo_id=model_repo, filename=file, local_dir=destination_folder)
+#     print(f"Downloaded {file} to {file_path}")
 
-model = Qwen2VLForConditionalGeneration.from_pretrained(
-    "./showui-2b",
-    # "showlab/ShowUI-2B",
-    torch_dtype=torch.bfloat16,
-    device_map="cpu",
-)
+# model = Qwen2VLForConditionalGeneration.from_pretrained(
+#     "../../data/huggingface/showui-2b",
+#     # "showlab/ShowUI-2B",
+#     torch_dtype=torch.bfloat16,
+#     device_map="cpu",
+# )
 
 # Load the processor
-processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct", min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS)
+# processor = AutoProcessor.from_pretrained("../../data/huggingface/Qwen/Qwen2-VL-2B-Instruct", min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS)
+
+model, processor = get_model_and_processor()
+
 
 # Helper functions
 def draw_point(image_input, point=None, radius=5):
@@ -57,6 +61,7 @@ def draw_point(image_input, point=None, radius=5):
         ImageDraw.Draw(image).ellipse((x - radius, y - radius, x + radius, y + radius), fill='red')
     return image
 
+
 def array_to_image_path(image_array):
     """Save the uploaded image and return its path."""
     if image_array is None:
@@ -64,8 +69,11 @@ def array_to_image_path(image_array):
     img = Image.fromarray(np.uint8(image_array))
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"image_{timestamp}.png"
-    img.save(filename)
-    return os.path.abspath(filename)
+    os.makedirs("uploads", exist_ok=True)  # Create the 'uploads' directory if it doesn't exist
+    save_path = os.path.join("uploads", filename)  # Save the image in the 'uploads' directory
+    img.save(save_path)
+    return os.path.abspath(save_path)
+
 
 @spaces.GPU
 def run_showui(image, query):
@@ -88,7 +96,7 @@ def run_showui(image, query):
     global model
 
     model = model.to("cuda")
-    
+
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     image_inputs, video_inputs = process_vision_info(messages)
     inputs = processor(
@@ -116,6 +124,7 @@ def run_showui(image, query):
     result_image = draw_point(image_path, click_xy, radius=10)
     return result_image, str(click_xy)
 
+
 # Function to record votes
 def record_vote(vote_type, image_path, query, action_generated):
     """Record a vote in a JSON file."""
@@ -130,6 +139,7 @@ def record_vote(vote_type, image_path, query, action_generated):
         f.write(json.dumps(vote_data) + "\n")
     return f"Your {vote_type} has been recorded. Thank you!"
 
+
 # Helper function to handle vote recording
 def handle_vote(vote_type, image_path, query, action_generated):
     """Handle vote recording by using the consistent image path."""
@@ -137,14 +147,16 @@ def handle_vote(vote_type, image_path, query, action_generated):
         return "No image uploaded. Please upload an image before voting."
     return record_vote(vote_type, image_path, query, action_generated)
 
+
 # Load logo and encode to Base64
-with open("./assets/showui.jpg", "rb") as image_file:
+with open("assets/showui.jpg", "rb") as image_file:
     base64_image = base64.b64encode(image_file.read()).decode("utf-8")
 
 
 # Define layout and UI
 def build_demo(embed_mode, concurrency_count=1):
-    with gr.Blocks(title="ShowUI Demo", theme=gr.themes.Default()) as demo:
+    with gr.Blocks(title="坐标预测", theme=gr.themes.Default(),
+                   css="footer {display: none !important;}") as demo:
         # State to store the consistent image path
         state_image_path = gr.State(value=None)
 
@@ -154,14 +166,15 @@ def build_demo(embed_mode, concurrency_count=1):
                 <div style="text-align: center; margin-bottom: 20px;">
                     <!-- Image -->
                     <div style="display: flex; justify-content: center;">
-                        <img src="data:image/png;base64,{base64_image}" alt="ShowUI" width="320" style="margin-bottom: 10px;"/>
+                      <!-- <img src="data:image/png;base64,{base64_image}" alt="ShowUI" width="320" style="margin-bottom: 10px;"/> -->
+                      <p style="font-size: 24px; font-weight: bold;">坐标预测</p>
                     </div>
             
                     <!-- Description -->
-                    <p>ShowUI is a lightweight vision-language-action model for GUI agents.</p>
+                    <!-- <p>ShowUI is a lightweight vision-language-action model for GUI agents.</p> -->
             
                     <!-- Links -->
-                    <div style="display: flex; justify-content: center; gap: 15px; font-size: 20px;">
+                   <!-- <div style="display: flex; justify-content: center; gap: 15px; font-size: 20px;">
                         <a href="https://huggingface.co/showlab/ShowUI-2B" target="_blank">
                             <img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-ShowUI--2B-blue" alt="model"/>
                         </a>
@@ -171,7 +184,7 @@ def build_demo(embed_mode, concurrency_count=1):
                         <a href="https://github.com/showlab/ShowUI" target="_blank">
                             <img src="https://img.shields.io/badge/GitHub-ShowUI-black" alt="GitHub"/>
                         </a>
-                    </div>
+                    </div> -->
                 </div>
                 """
             )
@@ -183,52 +196,57 @@ def build_demo(embed_mode, concurrency_count=1):
                 textbox = gr.Textbox(
                     show_label=True,
                     placeholder="Enter a query (e.g., 'Click Nahant')",
-                    label="Query",
+                    label="查询",
                 )
-                submit_btn = gr.Button(value="Submit", variant="primary")
+                submit_btn = gr.Button(value="提交", variant="primary")
 
                 # Placeholder examples
-                gr.Examples(
-                    examples=[
-                        ["./examples/app_store.png", "Download Kindle."],
-                        ["./examples/ios_setting.png", "Turn off Do not disturb."],
-                        ["./examples/apple_music.png", "Star to favorite."],
-                        ["./examples/map.png", "Boston."],
-                        ["./examples/wallet.png", "Scan a QR code."],
-                        ["./examples/word.png", "More shapes."],
-                        ["./examples/web_shopping.png", "Proceed to checkout."],
-                        ["./examples/web_forum.png", "Post my comment."],
-                        ["./examples/safari_google.png", "Click on search bar."],
-                    ],
-                    inputs=[imagebox, textbox],
-                    examples_per_page=3
-                )
+                # gr.Examples(
+                #     examples=[
+                #         ["./examples/app_store.png", "Download Kindle."],
+                #         ["./examples/ios_setting.png", "Turn off Do not disturb."],
+                #         ["./examples/apple_music.png", "Star to favorite."],
+                #         ["./examples/map.png", "Boston."],
+                #         ["./examples/wallet.png", "Scan a QR code."],
+                #         ["./examples/word.png", "More shapes."],
+                #         ["./examples/web_shopping.png", "Proceed to checkout."],
+                #         ["./examples/web_forum.png", "Post my comment."],
+                #         ["./examples/safari_google.png", "Click on search bar."],
+                #     ],
+                #     inputs=[imagebox, textbox],
+                #     examples_per_page=3
+                # )
 
             with gr.Column(scale=8):
                 # Output components
                 output_img = gr.Image(type="pil", label="Output Image")
                 # Add a note below the image to explain the red point
+                # gr.HTML(
+                #     """
+                #     <p><strong>Note:</strong> The <span style="color: red;">red point</span> on the output image represents the predicted clickable coordinates.</p>
+                #     """
+                # )
                 gr.HTML(
                     """
-                    <p><strong>Note:</strong> The <span style="color: red;">red point</span> on the output image represents the predicted clickable coordinates.</p>
+                    <p><strong>注意:</strong> 输出图像上的 <span style="color: red;">红点</span> 表示预测的可点击坐标。</p>
                     """
                 )
-                output_coords = gr.Textbox(label="Clickable Coordinates")
+                output_coords = gr.Textbox(label="可点击的坐标")
 
                 # Buttons for voting, flagging, regenerating, and clearing
                 with gr.Row(elem_id="action-buttons", equal_height=True):
-                    vote_btn = gr.Button(value="👍 Vote", variant="secondary")
-                    downvote_btn = gr.Button(value="👎 Downvote", variant="secondary")
-                    flag_btn = gr.Button(value="🚩 Flag", variant="secondary")
-                    regenerate_btn = gr.Button(value="🔄 Regenerate", variant="secondary")
-                    clear_btn = gr.Button(value="🗑️ Clear", interactive=True)  # Combined Clear button
+                    # vote_btn = gr.Button(value="👍 Vote", variant="secondary")
+                    # downvote_btn = gr.Button(value="👎 Downvote", variant="secondary")
+                    # flag_btn = gr.Button(value="🚩 Flag", variant="secondary")
+                    regenerate_btn = gr.Button(value="🔄 重新生成", variant="secondary")
+                    clear_btn = gr.Button(value="🗑️ 清除", interactive=True)  # Combined Clear button
 
             # Define button actions
             def on_submit(image, query):
                 """Handle the submit button click."""
                 if image is None:
                     raise ValueError("No image provided. Please upload an image before submitting.")
-                
+
                 # Generate consistent image path and store it in the state
                 image_path = array_to_image_path(image)
                 return run_showui(image, query) + (image_path,)
@@ -253,40 +271,45 @@ def build_demo(embed_mode, concurrency_count=1):
             )
 
             # Record vote actions without feedback messages
-            vote_btn.click(
-                lambda image_path, query, action_generated: handle_vote(
-                    "upvote", image_path, query, action_generated
-                ),
-                inputs=[state_image_path, textbox, output_coords],
-                outputs=[],
-                queue=False
-            )
+            # vote_btn.click(
+            #     lambda image_path, query, action_generated: handle_vote(
+            #         "upvote", image_path, query, action_generated
+            #     ),
+            #     inputs=[state_image_path, textbox, output_coords],
+            #     outputs=[],
+            #     queue=False
+            # )
 
-            downvote_btn.click(
-                lambda image_path, query, action_generated: handle_vote(
-                    "downvote", image_path, query, action_generated
-                ),
-                inputs=[state_image_path, textbox, output_coords],
-                outputs=[],
-                queue=False
-            )
+            # downvote_btn.click(
+            #     lambda image_path, query, action_generated: handle_vote(
+            #         "downvote", image_path, query, action_generated
+            #     ),
+            #     inputs=[state_image_path, textbox, output_coords],
+            #     outputs=[],
+            #     queue=False
+            # )
 
-            flag_btn.click(
-                lambda image_path, query, action_generated: handle_vote(
-                    "flag", image_path, query, action_generated
-                ),
-                inputs=[state_image_path, textbox, output_coords],
-                outputs=[],
-                queue=False
-            )
+            # flag_btn.click(
+            #     lambda image_path, query, action_generated: handle_vote(
+            #         "flag", image_path, query, action_generated
+            #     ),
+            #     inputs=[state_image_path, textbox, output_coords],
+            #     outputs=[],
+            #     queue=False
+            # )
 
     return demo
+
+
 # Launch the app
 if __name__ == "__main__":
     demo = build_demo(embed_mode=False)
     demo.queue(api_open=False).launch(
         server_name="0.0.0.0",
-        server_port=7860,
-        ssr_mode=False,
+        server_port=11505,
+        ssr_mode=True,
         debug=True,
+        share=True,
+        show_error=True,
+        show_api=False,
     )
